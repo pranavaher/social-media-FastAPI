@@ -39,25 +39,33 @@ def root_route():
   return {"message": "dcdchhhhhhdcd" }
 
 @app.get("/posts")
-def get_posts():
-  cursor.execute(""" SELECT * FROM posts """)
-  posts = cursor.fetchall()
+def get_posts(db: Session = Depends(get_db)):
+  # cursor.execute(""" SELECT * FROM posts """)
+  # posts = cursor.fetchall()
+
+  posts = db.query(models.Post).all()
 
   return { "data": posts }
 
 @app.post("/posts", status_code = status.HTTP_201_CREATED)
-def create_post(post: Post):
-  cursor.execute(""" INSERT INTO posts (title, content, published) VALUES (%s, %s, %s) RETURNING * """, (post.title, post.content, post.published))
+def create_post(post: Post, db: Session = Depends(get_db)):
+  # cursor.execute(""" INSERT INTO posts (title, content, published) VALUES (%s, %s, %s) RETURNING * """, (post.title, post.content, post.published))
+  # new_post = cursor.fetchone()
+  # connection.commit()
 
-  new_post = cursor.fetchone()
-  
-  connection.commit()
+  new_post = models.Post(**post.model_dump())
+  db.add(new_post)
+  db.commit()
+  db.refresh(new_post) # Get newly created post in new_post
+
   return { "message": new_post }
 
 @app.get("/posts/{id}")
-def get_post(id: int):
-  cursor.execute(""" SELECT * FROM posts WHERE id = %s """, (str(id)))
-  post = cursor.fetchone()
+def get_post(id: int, db: Session = Depends(get_db)):
+  # cursor.execute(""" SELECT * FROM posts WHERE id = %s """, (str(id)))
+  # post = cursor.fetchone()
+
+  post = db.query(models.Post).filter(models.Post.id == id).first()
 
   if not post:
     raise HTTPException(status_code = status.HTTP_404_NOT_FOUND, detail = f"Post with id {id} not found") 
@@ -65,25 +73,33 @@ def get_post(id: int):
   return { "data": post }
     
 @app.put("/posts/{id}", status_code = status.HTTP_204_NO_CONTENT)
-def update_post(id: int, post: Post):
-  cursor.execute(""" UPDATE posts SET title = %s, content = %s, published = %s WHERE id = %s RETURNING * """, (post.title, post.content, post.published, str(id)))
+def update_post(id: int, updated_post: Post, db: Session = Depends(get_db)):
+  # cursor.execute(""" UPDATE posts SET title = %s, content = %s, published = %s WHERE id = %s RETURNING * """, (post.title, post.content, post.published, str(id)))
+  # updated_post = cursor.fetchone()
+  # connection.commit()
 
-  updated_post = cursor.fetchone()
+  post = db.query(models.Post).filter(models.Post.id == id)
 
-  if updated_post is None:
+  if post.first() is None:
     raise HTTPException(status_code = status.HTTP_404_NOT_FOUND, detail = f"Post with id {id} not found")
+  
+  post.update(updated_post.model_dump(), synchronize_session=False)
+  db.commit()
 
-  connection.commit()
-  return { "data": updated_post }
+  return { "data": post.first() }
 
 @app.delete("/posts/{id}", status_code = status.HTTP_204_NO_CONTENT)
-def delete_post(id: int):
-  cursor.execute(""" DELETE FROM posts WHERE id = %s RETURNING * """, (str(id)))
-  deleted_post = cursor.fetchone()
+def delete_post(id: int, db: Session = Depends(get_db)):
+  # cursor.execute(""" DELETE FROM posts WHERE id = %s RETURNING * """, (str(id)))
+  # deleted_post = cursor.fetchone()
+  # connection.commit()
 
+  post = db.query(models.Post).filter(models.Post.id == id)
 
-  if deleted_post is None:
+  if post.first() is None:
     raise HTTPException(status_code = status.HTTP_404_NOT_FOUND, detail = f"Post with id {id} not found")
+  
+  post.delete(synchronize_session=False)
+  db.commit()
 
-  connection.commit()
   return Response(status_code = status.HTTP_204_NO_CONTENT)
