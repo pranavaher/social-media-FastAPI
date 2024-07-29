@@ -1,5 +1,6 @@
 from fastapi import Response, status, HTTPException, Depends, APIRouter
 from typing import List, Optional
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from ..database import engine, get_db
 from .. import models, schemas, oauth2
@@ -9,14 +10,38 @@ router = APIRouter(
   tags=["Posts"]
 )
 
-@router.get("/", response_model = List[schemas.PostResponse])
-def get_posts(db: Session = Depends(get_db), current_user: int = Depends(oauth2.get_current_user), limit: int = 5, skip: int = 0, search: Optional[str] = ""):
-  # cursor.execute(""" SELECT * FROM posts """)
-  # posts = cursor.fetchall()
+@router.get("/", response_model=List[schemas.PostLikeResponse])
+def get_posts(db: Session = Depends(get_db), current_user: int = Depends(oauth2.get_current_user), limit: int = 100, skip: int = 0, search: Optional[str] = ""):
 
-  posts = db.query(models.Post).filter(models.Post.owner_id == current_user.id).filter(models.Post.title.contains(search)).limit(limit).offset(skip).all()
+  # Restrict user to see own posts only
+  
+  # posts = db.query(models.Post).filter(models.Post.owner_id == current_user.id).filter(models.Post.title.contains(search)).limit(limit).offset(skip).all()
 
-  return posts
+  # View All Posts
+
+  posts = db.query(models.Post, func.count(models.Vote.post_id).label("likes")).join(models.Vote, models.Post.id == models.Vote.post_id, isouter=True).group_by(models.Post.id).filter(models.Post.title.contains(search)).limit(limit).offset(skip).all()
+
+  print(db.query(models.Post, func.count(models.Vote.post_id).label("likes")).join(models.Vote, models.Post.id == models.Vote.post_id, isouter=True).group_by(models.Post.id).filter(models.Post.title.contains(search)).limit(limit).offset(skip))
+
+  results = []
+  for post, likes in posts:
+    post_dict = {
+      'id': post.id,
+      'title': post.title,
+      'content': post.content,
+      'published': post.published,
+      'created_at': post.created_at,
+      'owner_id': post.owner_id,
+      'owner': {
+        'id': post.owner.id,
+        'email': post.owner.email,
+        'created_at': post.owner.created_at
+      },
+      'likes': likes
+    }
+    results.append(post_dict)
+
+  return results
 
 @router.post("/", status_code = status.HTTP_201_CREATED, response_model = schemas.PostResponse)
 def create_post(post: schemas.PostCreate, db: Session = Depends(get_db), current_user: int = Depends(oauth2.get_current_user)):

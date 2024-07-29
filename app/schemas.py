@@ -16,11 +16,18 @@ class UserResponse(BaseModel):
 
   class Config:
     orm_mode = True
+
 class PostResponse(PostBase):
   id: int
   owner_id: int
   created_at: datetime
   owner: UserResponse
+
+  class Config:
+    orm_mode = True
+
+class PostLikeResponse(PostResponse):
+  likes: int
 
   class Config:
     orm_mode = True
